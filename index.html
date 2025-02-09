@@ -199,7 +199,11 @@
     }
     .removing { animation: removeAnimation 0.5s forwards; }
     /* Button styles */
-    .button-container { margin-top: 10px; }
+    .button-container { 
+      margin-top: 10px; 
+      position: relative; 
+      padding-right: 40px; /* extra space to avoid overlap with the indicator */
+    }
     .btn {
       background-color: #001f3f;
       color: #fff;
@@ -419,16 +423,16 @@
       transform: scale(1.02);
       transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
     }
-    /* Recommended Action Indicator */
+    /* Recommended Action Indicator (the dot) */
     .action-indicator {
       width: 20px;
       height: 20px;
       border-radius: 50%;
-      position: absolute;
-      bottom: 10px;
-      right: 10px;
       border: 2px solid #fff;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     /* Custom Tooltip Styles */
     .tooltip {
@@ -826,8 +830,10 @@
           proceedSpinner.className = "spinner";
           buttonContainer.appendChild(proceedSpinner);
     
-          // Updated prompt without "Writing Quality and Clarity" and with extra Abstract section
-          const prompt = `Imagine that you are a law articles reviewer for the Yale Law Journal. Review the following article submission for a law school’s law review/journal. Provide extremely detailed feedback—quote the original article where appropriate.
+          // Updated prompt with instructions to ignore OCR typos, include scoring and JSON format
+          const prompt = `Imagine that you are a law articles reviewer for the Yale Law Journal. When reviewing, please ignore any minor typos that might have been introduced by OCR errors.
+
+Review the following article submission for a law school’s law review/journal. Provide extremely detailed feedback—quote the original article where appropriate.
 
 1. Policy and Practical Implications:
    - Application: Does the article move beyond abstract theory to address how its findings or proposals might affect real-world legal practice or policy reform?
@@ -848,7 +854,15 @@
 
 Additionally, include an extra section labeled "Abstract" that provides a detailed summary of the article—explaining what it is about, its main point, major arguments, and quoting key passages where relevant.
 
-Based on your evaluation, provide a recommended action: "accept" or "reject".
+For each of the four criteria, assign a score using the following weights:
+- **Quality of Legal Analysis and Argumentation:** up to **4 points**
+- **Originality and Contribution to the Field:** up to **2 points**
+- **Policy and Practical Implications:** up to **1 point**
+- **Methodology and Theoretical Framework:** up to **3 points**
+
+Compute a **total score** (out of 10). In order for an article to be accepted, it must score at least **6 points** overall.
+
+Based on your evaluation, please also provide a recommended action: "accept" or "reject".
 
 Output the review as valid JSON strictly following this format (and nothing else):
 
@@ -859,6 +873,13 @@ Output the review as valid JSON strictly following this format (and nothing else
       "Originality and Contribution to the Field": "Your detailed evaluation here.",
       "Quality of Legal Analysis and Argumentation": "Your detailed evaluation here.",
       "Methodology and Theoretical Framework": "Your detailed evaluation here."
+  },
+  "scores": {
+      "Policy and Practical Implications": <score out of 1>,
+      "Originality and Contribution to the Field": <score out of 2>,
+      "Quality of Legal Analysis and Argumentation": <score out of 4>,
+      "Methodology and Theoretical Framework": <score out of 3>,
+      "total": <total score out of 10>
   },
   "abstract": "Your detailed abstract here.",
   "recommended_action": "accept" // or "reject"
@@ -912,6 +933,13 @@ ${cleanedText}`;
                 "Quality of Legal Analysis and Argumentation": "No evaluation generated.",
                 "Methodology and Theoretical Framework": "No evaluation generated."
               },
+              scores: {
+                "Policy and Practical Implications": 0,
+                "Originality and Contribution to the Field": 0,
+                "Quality of Legal Analysis and Argumentation": 0,
+                "Methodology and Theoretical Framework": 0,
+                "total": 0
+              },
               abstract: "No abstract generated.",
               recommended_action: "reject"
             };
@@ -934,21 +962,45 @@ ${cleanedText}`;
           buttonContainer.appendChild(downloadBtn);
           // --- End Download Button ---
     
-          // --- Create Action Indicator with Click-to-Show Tooltip ---
+          // --- Create Action Indicator Container with Dot and Score ---
+          const indicatorContainer = document.createElement("div");
+          indicatorContainer.style.position = "absolute";
+          indicatorContainer.style.bottom = "10px";
+          indicatorContainer.style.right = "10px";
+          indicatorContainer.style.display = "flex";
+          indicatorContainer.style.alignItems = "center";
+    
           const actionIndicator = document.createElement("div");
           actionIndicator.id = "action-indicator-" + fileId;
           actionIndicator.className = "action-indicator";
+          // Leave the dot empty (no text)
+          actionIndicator.textContent = "";
+    
+          // Read the total score from the evaluation
+          const totalScore = structuredEvaluation.scores && structuredEvaluation.scores.total ? structuredEvaluation.scores.total : 0;
           let tooltipMessage = "";
+    
+          // Set the dot color based on recommended action
           if (structuredEvaluation.recommended_action.toLowerCase() === "accept") {
             actionIndicator.style.backgroundColor = "green";
-            tooltipMessage = "Accepted: The article demonstrates robust legal analysis, innovative insights, and practical policy implications.";
+            tooltipMessage = `Accepted (${totalScore}/10): The article demonstrates robust legal analysis, innovative insights, and practical policy implications.`;
           } else {
             actionIndicator.style.backgroundColor = "red";
-            tooltipMessage = "Rejected: The article did not meet the required scholarly standards in analysis, structure, or practical application.";
+            tooltipMessage = `Rejected (${totalScore}/10): The article did not meet the required scholarly standards in analysis, structure, or practical application.`;
           }
-          actionIndicator.title = tooltipMessage; // fallback tooltip on hover
-          // On click, show a custom tooltip that avoids overlapping the Download Review button
-          actionIndicator.addEventListener("click", function(event) {
+    
+          // Create a separate span for the score (in black)
+          const scoreSpan = document.createElement("span");
+          scoreSpan.style.color = "#000";
+          scoreSpan.style.marginLeft = "5px";
+          scoreSpan.style.fontSize = "14px";
+          scoreSpan.textContent = `${totalScore}/10`;
+    
+          // Attach tooltip to the container
+          indicatorContainer.title = tooltipMessage;
+    
+          // On click, show a custom tooltip (same behavior as before)
+          indicatorContainer.addEventListener("click", function(event) {
             event.stopPropagation();
             let tooltip = document.getElementById("tooltip-" + fileId);
             if (!tooltip) {
@@ -957,18 +1009,15 @@ ${cleanedText}`;
               tooltip.className = "tooltip";
               tooltip.textContent = tooltipMessage;
               document.body.appendChild(tooltip);
-              const rect = actionIndicator.getBoundingClientRect();
-              // Calculate horizontal position (centered relative to the circle)
+              const rect = indicatorContainer.getBoundingClientRect();
               const tooltipWidth = tooltip.offsetWidth;
               let leftPos = rect.left + rect.width / 2 - tooltipWidth / 2;
               leftPos = Math.max(10, Math.min(leftPos, window.innerWidth - tooltipWidth - 10));
               tooltip.style.left = leftPos + "px";
-              // Calculate initial vertical position (above the circle)
               let topPos = rect.top - tooltip.offsetHeight - 10;
               if (topPos < 10) { 
                 topPos = rect.bottom + 10;
               }
-              // Check for overlap with Download Review button
               const downloadBtn = document.getElementById("download-btn-" + fileId);
               if (downloadBtn) {
                 const downloadRect = downloadBtn.getBoundingClientRect();
@@ -984,7 +1033,10 @@ ${cleanedText}`;
               setTimeout(() => { tooltip.remove(); }, 3000);
             }
           });
-          fileItem.appendChild(actionIndicator);
+    
+          indicatorContainer.appendChild(actionIndicator);
+          indicatorContainer.appendChild(scoreSpan);
+          fileItem.appendChild(indicatorContainer);
         });
       } catch (error) {
         console.error("Error processing PDF:", error);
@@ -1046,15 +1098,30 @@ ${cleanedText}`;
       return html;
     }
     
-    // Updated to also display the abstract
+    // Updated to also display the abstract and individual criteria scores in the summary page
     function generateDetailedSummaryHTML(evaluation) {
+      // Define max points for each criterion
+      const maxPoints = {
+        "Policy and Practical Implications": 1,
+        "Originality and Contribution to the Field": 2,
+        "Quality of Legal Analysis and Argumentation": 4,
+        "Methodology and Theoretical Framework": 3
+      };
       let html = `<h2>${evaluation.title}</h2>`;
       html += `<div class="section">
                 <h3>Evaluation</h3>
                 <div class="section-content">`;
       for (const criterion in evaluation.evaluations) {
-        html += `<p><strong>${criterion}:</strong> ${evaluation.evaluations[criterion]}</p>`;
+        // Check if a score is available for this criterion
+        let scoreDisplay = "";
+        if (evaluation.scores && evaluation.scores[criterion] !== undefined) {
+          scoreDisplay = ` <span style="font-weight:bold; color:black;">(Score: ${evaluation.scores[criterion]}/${maxPoints[criterion]})</span>`;
+        }
+        html += `<p><strong>${criterion}:</strong> ${evaluation.evaluations[criterion]}${scoreDisplay}</p>`;
       }
+      // Add overall Recommended Action and total Score
+      html += `<p><strong>Recommended Action:</strong> ${evaluation.recommended_action.toUpperCase()}</p>`;
+      html += `<p><strong>Total Score:</strong> ${evaluation.scores.total}/10</p>`;
       html += `</div>
               </div>`;
       if (evaluation.abstract) {
@@ -1096,6 +1163,7 @@ ${cleanedText}`;
       }
       html += `<p><strong>Abstract:</strong> ${evaluation.abstract}</p>`;
       html += `<p><strong>Recommended Action:</strong> ${evaluation.recommended_action.toUpperCase()}</p>`;
+      html += `<p><strong>Total Score:</strong> ${evaluation.scores.total}/10</p>`;
       html += `</div></body></html>`;
       return html;
     }
