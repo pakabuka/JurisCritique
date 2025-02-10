@@ -1098,9 +1098,9 @@ ${cleanedText}`;
       return html;
     }
     
-    // Updated to also display the abstract and individual criteria scores in the summary page
+    // Updated generateDetailedSummaryHTML function to add a new section between Recommended Action and Total Score
     function generateDetailedSummaryHTML(evaluation) {
-      // Define max points for each criterion
+      // Define maximum points for each criterion
       const maxPoints = {
         "Policy and Practical Implications": 1,
         "Originality and Contribution to the Field": 2,
@@ -1111,16 +1111,23 @@ ${cleanedText}`;
       html += `<div class="section">
                 <h3>Evaluation</h3>
                 <div class="section-content">`;
+      // List each evaluation (without individual score display)
       for (const criterion in evaluation.evaluations) {
-        // Check if a score is available for this criterion
-        let scoreDisplay = "";
-        if (evaluation.scores && evaluation.scores[criterion] !== undefined) {
-          scoreDisplay = ` <span style="font-weight:bold; color:black;">(Score: ${evaluation.scores[criterion]}/${maxPoints[criterion]})</span>`;
-        }
-        html += `<p><strong>${criterion}:</strong> ${evaluation.evaluations[criterion]}${scoreDisplay}</p>`;
+        html += `<p><strong>${criterion}:</strong> ${evaluation.evaluations[criterion]}</p>`;
       }
-      // Add overall Recommended Action and total Score
+      // Overall recommended action
       html += `<p><strong>Recommended Action:</strong> ${evaluation.recommended_action.toUpperCase()}</p>`;
+      // New section for individual criterion scores
+      html += `<div class="section">
+                 <h4>Individual Criterion Scores:</h4>
+                 <ul>`;
+      for (const criterion in evaluation.scores) {
+        if (criterion === "total") continue;
+        html += `<li><strong>${criterion}:</strong> ${evaluation.scores[criterion]}/${maxPoints[criterion]}</li>`;
+      }
+      html += `</ul>
+               </div>`;
+      // Total Score
       html += `<p><strong>Total Score:</strong> ${evaluation.scores.total}/10</p>`;
       html += `</div>
               </div>`;
